@@ -3,7 +3,7 @@
 
 # Relative path conversion top directories.
 set(CMAKE_RELATIVE_PATH_TOP_SOURCE "/Users/luke/Source/pico/pico-sdk/src/common/boot_uf2")
-set(CMAKE_RELATIVE_PATH_TOP_BINARY "/Users/luke/Source/pico/Ibeacon/build/elf2uf2")
+set(CMAKE_RELATIVE_PATH_TOP_BINARY "/Users/luke/Source/pico/ESCControl/build/elf2uf2")
 
 # Force unix paths in dependencies.
 set(CMAKE_FORCE_UNIX_PATHS 1)

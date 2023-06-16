@@ -336,8 +336,6 @@ file(REMOVE_RECURSE
   "CMakeFiles/main.dir/Users/luke/Source/pico/pico-sdk/src/rp2_common/pico_unique_id/unique_id.c.obj.d"
   "CMakeFiles/main.dir/main.c.obj"
   "CMakeFiles/main.dir/main.c.obj.d"
-  "CMakeFiles/main.dir/protocal.c.obj"
-  "CMakeFiles/main.dir/protocal.c.obj.d"
   "main.elf"
   "main.pdb"
 )

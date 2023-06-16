@@ -4,111 +4,229 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <inttypes.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "hardware/gpio.h"
+#include "hardware/pwm.h"
 #include "pico/cyw43_arch.h"
 #include "pico/stdlib.h"
 
-#include "lwip/pbuf.h"
-#include "lwip/udp.h"
+// flux control gates connected to PWM 2 - 7
+// this way we can use bit masking
+// 11111100
+// phase A 2 3
+// phase B 4 5
+// phase C 6 7
+#define QPINMASK 0xFC
+#define QPINFIRSTPIN 2
 
-#include "protocal.h"
+//  Bin values to set the control gate for each commutation
+// forward set
+//
+// WRONG NEEDS UPDATE
+#define CAbc 0b00010100
+#define CABc 0b10010000
+#define CaBc 0b10000100
+#define CaBC 0b00100100
+#define CabC 0b01100000
+#define CAbC 0b01001000
 
-char ssid[] = "232 wifi";
-char pass[] = "barkcbask";
+// PWM desired frequency
+#define PWMFREQUENCY 16000
+// defualt Clock speed
+#define SYSTEMCLOCK 125000000
+// PWM wrap
+#define PWMWRAP (SYSTEMCLOCK / PWMFREQUENCY - 1)
 
-#define UDP_PORT 6401
-#define BEACON_MSG_LEN_MAX 100
-#define BEACON_TARGET "255.255.255.255"
-#define BEACON_INTERVAL_MS 1000
+// ADC pin for detecting the current flow
+#define CURRENTSENSOR 34
 
-void run_udp_beacon() {
-  struct udp_pcb *pcb = udp_new();
+// PWM for controlling current flow
+#define CURRENTFLOW 9
 
-  int s = 12;
-  char buf[s];
-  int name = 32;
+// Hall effect sensors GPIO 10-12
+// using schmitt triger to translate to digital
+#define HALLEFFECTFIRSTPIN 16
+#define HALLEFFECTMASK                                                         \
+  ((1 << HALLEFFECTFIRSTPIN) | (1 << HALLEFFECTFIRSTPIN + 1) |                 \
+   (1 << HALLEFFECTFIRSTPIN + 2))
 
-  encodeBroadcast(name, buf, s);
+// Source voltage Sense
+#define VOLTAGESOURCESENSE = 32
 
-  ip_addr_t addr;
-  ipaddr_aton(BEACON_TARGET, &addr);
+// Host pwm request
+#define PWMIN = 17
 
-  int counter = 0;
-  while (true) {
-    struct pbuf *p =
-        pbuf_alloc(PBUF_TRANSPORT, BEACON_MSG_LEN_MAX + 1, PBUF_RAM);
-    // p->payload = buf;
+// enum for the current hall effect state, lower case indates a low value, and
+// upper case is a high value
+enum HallEState { hAbc, hABc, haBc, haBC, habC, hAbC, error };
 
-    char *req = (char *)p->payload;
+typedef enum State {
+  initialize,
+  waiting,
+  running
 
-    memset(req, 0, BEACON_MSG_LEN_MAX + 1);
-    memcpy(req, buf, s);
+} State;
 
-    // memset(req, 0, BEACON_MSG_LEN_MAX + 1);
-    // snprintf(req, BEACON_MSG_LEN_MAX, "%d\n", counter);
+typedef enum Direction { forward, reverse, none } Direction;
 
-    err_t er = udp_sendto(pcb, p, &addr, UDP_PORT);
-    pbuf_free(p);
-    if (er != ERR_OK) {
-      printf("Failed to send UDP packet! error=%d", er);
-      while (true) {
-        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
-        sleep_ms(500);
-        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
-        sleep_ms(500);
-      }
+typedef struct PWMpin {
+  uint32_t pinNumber;
+  uint32_t slice;
+  uint32_t channel;
+} PWMpin;
 
-    } else {
-      cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
-      sleep_ms(1000);
-      cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
-      sleep_ms(1000);
-      counter++;
-    }
+PWMpin PWMpinData(uint32_t pinNumber) {
+  PWMpin p;
+  p.pinNumber = pinNumber;
+  p.slice = pwm_gpio_to_slice_num(pinNumber);
+  p.channel = pwm_gpio_to_channel(pinNumber);
+  return p;
+}
 
-    // Note in practice for this simple UDP transmitter,
-    // the end result for both background and poll is the same
+typedef struct CommutationStep {
+  enum HallEState state;
+  PWMpin Fpins[2];
+  PWMpin Rpins[2];
 
-#if PICO_CYW43_ARCH_POLL
-    // if you are using pico_cyw43_arch_poll, then you must poll periodically
-    // from your main loop (not from a timer) to check for Wi-Fi driver or lwIP
-    // work that needs to be done.
-    cyw43_arch_poll();
-    sleep_ms(BEACON_INTERVAL_MS);
-#else
-    // if you are not using pico_cyw43_arch_poll, then WiFI driver and lwIP work
-    // is done via interrupt in the background. This sleep is just an example of
-    // some (blocking) work you might be doing.
-    sleep_ms(BEACON_INTERVAL_MS);
-#endif
+} CommutationStep;
+
+uint32_t get_index_from_Halleffect(uint32_t GPIO, uint32_t hallEffectMask,
+                                   uint32_t halleffectFirstPin) {
+  uint32_t i = (GPIO & hallEffectMask) >> halleffectFirstPin;
+
+  switch (i) {
+  case 0:
+    return 6;
+  case 1:
+    return 1;
+  case 2:
+    return 5;
+  case 3:
+    return 0;
+  case 4:
+    return 3;
+  case 5:
+    return 2;
+  case 6:
+    return 4;
+  case 7:
+    return 6;
   }
+}
+
+uint32_t hallEffectFlag = 0;
+
+void hallEffect_callback(uint gpio, uint32_t events) { hallEffectFlag = 1; }
+
+uint32_t dutyCycleToLevel(float duty) {
+  return (uint32_t)((float)(PWMWRAP)*duty);
 }
 
 int main() {
   stdio_init_all();
-  if (cyw43_arch_init_with_country(CYW43_COUNTRY_USA)) {
+
+  if (cyw43_arch_init()) {
     printf("Wi-Fi init failed");
-    return 1;
+    return -1;
   }
 
-  cyw43_arch_enable_sta_mode();
+  PWMpin fluxPWMs[6];
+  for (int i = 0; i < 6; i++) {
+    gpio_set_function(QPINFIRSTPIN + i, GPIO_FUNC_PWM);
+    fluxPWMs[i] = PWMpinData(QPINFIRSTPIN + i);
+    pwm_set_wrap(fluxPWMs[i].slice, PWMWRAP);
+    pwm_set_enabled(fluxPWMs[i].slice, true);
+  }
 
-  if (cyw43_arch_wifi_connect_timeout_ms(ssid, pass, CYW43_AUTH_WPA2_AES_PSK,
-                                         100000)) {
-    while (true) {
+  CommutationStep commutationList[6];
+  commutationList[0].Fpins[0] = fluxPWMs[2];
+  commutationList[0].Fpins[1] = fluxPWMs[5];
+  commutationList[0].Rpins[0] = fluxPWMs[0];
+  commutationList[0].Rpins[1] = fluxPWMs[5];
+
+  commutationList[1].Fpins[0] = fluxPWMs[1];
+  commutationList[1].Fpins[1] = fluxPWMs[2];
+  commutationList[1].Rpins[0] = fluxPWMs[2];
+  commutationList[1].Rpins[1] = fluxPWMs[5];
+
+  commutationList[2].Fpins[0] = fluxPWMs[1];
+  commutationList[2].Fpins[1] = fluxPWMs[4];
+  commutationList[2].Rpins[0] = fluxPWMs[1];
+  commutationList[2].Rpins[1] = fluxPWMs[2];
+
+  commutationList[3].Fpins[0] = fluxPWMs[3];
+  commutationList[3].Fpins[1] = fluxPWMs[4];
+  commutationList[3].Rpins[0] = fluxPWMs[1];
+  commutationList[3].Rpins[1] = fluxPWMs[4];
+
+  commutationList[4].Fpins[0] = fluxPWMs[0];
+  commutationList[4].Fpins[1] = fluxPWMs[3];
+  commutationList[4].Rpins[0] = fluxPWMs[3];
+  commutationList[4].Rpins[1] = fluxPWMs[4];
+
+  commutationList[5].Fpins[0] = fluxPWMs[0];
+  commutationList[5].Fpins[1] = fluxPWMs[5];
+  commutationList[5].Rpins[0] = fluxPWMs[0];
+  commutationList[5].Rpins[1] = fluxPWMs[3];
+
+  // enable callbacks for the hall effect pins
+  gpio_set_irq_enabled_with_callback(HALLEFFECTFIRSTPIN,
+                                     GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL,
+                                     true, &hallEffect_callback);
+  gpio_set_irq_enabled_with_callback(HALLEFFECTFIRSTPIN + 1,
+                                     GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL,
+                                     true, &hallEffect_callback);
+  gpio_set_irq_enabled_with_callback(HALLEFFECTFIRSTPIN + 2,
+                                     GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL,
+                                     true, &hallEffect_callback);
+
+  // State state = initialize;
+  Direction directrion = forward;
+  uint32_t Tlevel = dutyCycleToLevel(.7);
+
+  while (1) {
+
+    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
+    sleep_ms(500);
+    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
+    sleep_ms(500);
+
+    // check HallFlag
+    if (hallEffectFlag == 1) {
       cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
       sleep_ms(100);
       cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
       sleep_ms(100);
+
+      hallEffectFlag = 0;
+      uint32_t aGPIO = gpio_get_all();
+      uint32_t CIndex =
+          get_index_from_Halleffect(aGPIO, HALLEFFECTMASK, HALLEFFECTFIRSTPIN);
+      if (CIndex != 6) {
+        CommutationStep CS = commutationList[CIndex];
+
+        for (int i = 0; i < 6; i++) {
+          pwm_set_chan_level(fluxPWMs[i].slice, fluxPWMs[i].channel,
+                             0);
+        }
+        PWMpin p[2];
+        switch (directrion) {
+        case forward:
+          pwm_set_chan_level(CS.Fpins[0].slice, CS.Fpins[0].channel, Tlevel);
+          pwm_set_chan_level(CS.Fpins[1].slice, CS.Fpins[2].channel, Tlevel);
+          break;
+        case reverse:
+          pwm_set_chan_level(CS.Rpins[0].slice, CS.Rpins[0].channel, Tlevel);
+          pwm_set_chan_level(CS.Rpins[1].slice, CS.Rpins[2].channel, Tlevel);
+
+          break;
+        case none:
+          break;
+        }
+      }
     }
-  } else {
-    //
-    //    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
-    //    sleep_ms(250);
-    run_udp_beacon();
   }
 }

@@ -1,4 +1,4 @@
-// Padded and checksummed version of: /Users/luke/Source/pico/Ibeacon/build/pico-sdk/src/rp2_common/boot_stage2/bs2_default.bin
+// Padded and checksummed version of: /Users/luke/Source/pico/ESCControl/build/pico-sdk/src/rp2_common/boot_stage2/bs2_default.bin
 
 .cpu cortex-m0plus
 .thumb

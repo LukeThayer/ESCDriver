@@ -45,5 +45,5 @@ endif()
 
 string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
        "${CMAKE_INSTALL_MANIFEST_FILES}")
-file(WRITE "/Users/luke/Source/pico/Ibeacon/build/pioasm/${CMAKE_INSTALL_MANIFEST}"
+file(WRITE "/Users/luke/Source/pico/ESCControl/build/pioasm/${CMAKE_INSTALL_MANIFEST}"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")

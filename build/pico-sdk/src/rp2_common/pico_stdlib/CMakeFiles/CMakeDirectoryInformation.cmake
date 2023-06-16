@@ -3,7 +3,7 @@
 
 # Relative path conversion top directories.
 set(CMAKE_RELATIVE_PATH_TOP_SOURCE "/Users/luke/Source/pico/pico-sdk")
-set(CMAKE_RELATIVE_PATH_TOP_BINARY "/Users/luke/Source/pico/Ibeacon/build")
+set(CMAKE_RELATIVE_PATH_TOP_BINARY "/Users/luke/Source/pico/ESCControl/build")
 
 # Force unix paths in dependencies.
 set(CMAKE_FORCE_UNIX_PATHS 1)

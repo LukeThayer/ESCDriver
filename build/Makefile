@@ -57,10 +57,10 @@ RM = /opt/homebrew/Cellar/cmake/3.26.0/bin/cmake -E rm -f
 EQUALS = =
 
 # The top-level source directory on which CMake was run.
-CMAKE_SOURCE_DIR = /Users/luke/Source/pico/Ibeacon
+CMAKE_SOURCE_DIR = /Users/luke/Source/pico/ESCControl
 
 # The top-level build directory on which CMake was run.
-CMAKE_BINARY_DIR = /Users/luke/Source/pico/Ibeacon/build
+CMAKE_BINARY_DIR = /Users/luke/Source/pico/ESCControl/build
 
 #=============================================================================
 # Targets provided globally by CMake.
@@ -87,9 +87,9 @@ rebuild_cache/fast: rebuild_cache
 
 # The main all target
 all: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/luke/Source/pico/Ibeacon/build/CMakeFiles /Users/luke/Source/pico/Ibeacon/build//CMakeFiles/progress.marks
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/luke/Source/pico/ESCControl/build/CMakeFiles /Users/luke/Source/pico/ESCControl/build//CMakeFiles/progress.marks
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 all
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/luke/Source/pico/Ibeacon/build/CMakeFiles 0
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/luke/Source/pico/ESCControl/build/CMakeFiles 0
 .PHONY : all
 
 # The main clean target
@@ -4207,30 +4207,6 @@ main.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/main.c.s
 .PHONY : main.c.s
 
-protocal.obj: protocal.c.obj
-.PHONY : protocal.obj
-
-# target to build an object file
-protocal.c.obj:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/protocal.c.obj
-.PHONY : protocal.c.obj
-
-protocal.i: protocal.c.i
-.PHONY : protocal.i
-
-# target to preprocess a source file
-protocal.c.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/protocal.c.i
-.PHONY : protocal.c.i
-
-protocal.s: protocal.c.s
-.PHONY : protocal.s
-
-# target to generate assembly for a file
-protocal.c.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/protocal.c.s
-.PHONY : protocal.c.s
-
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -4746,9 +4722,6 @@ help:
 	@echo "... main.obj"
 	@echo "... main.i"
 	@echo "... main.s"
-	@echo "... protocal.obj"
-	@echo "... protocal.i"
-	@echo "... protocal.s"
 .PHONY : help
 
 
